@@ -7,7 +7,7 @@ module Main where
 import Automation
 import Data
 import Data.Generics.Wrapped (_Unwrapped)
-import Data.List ((!!))
+import Data.List (head, (!!))
 import Data.Text qualified as Tx
 import Data.Text.Read qualified as Tx.R
 import Data.Vector qualified as V
@@ -18,6 +18,7 @@ import Draw
 import Logic
 import Optics ((^.))
 import Types
+import Prelude hiding (head)
 
 hand1 :: Hand
 hand1 = newHandFromNames ["Geezard", "Geezard", "Bite Bug", "Funguar", "Fasticholon-F"]
@@ -47,8 +48,8 @@ game =
   game0 P1
     & playCard (HandIx 0) (fromNice (RTop, CRight))
     & playCard (HandIx 0) (fromNice (RMid, CRight))
+    & playCard (HandIx 1) (fromNice (RBot, CRight))
 
--- & playCard (HandIx 1) (fromNice (RBot, CRight))
 -- & playCard (HandIx 1) (fromNice (RTop, CMid))
 -- & playCard (HandIx 2) (fromNice (RMid, CMid))
 -- & playCard (HandIx 2) (fromNice (RBot, CMid))
@@ -134,7 +135,7 @@ playGame g0 = do
             Nothing ->
               error "end"
             Just (_bestValue, bests) -> do
-              let ((hix, bix), _bestGame) = V.head bests
+              let ((hix, bix), _bestGame) = head bests
               putTextLn $ "P2 plays: " <> showPlay (hix, bix)
               let newGame = playCard hix bix g0
               playGame newGame

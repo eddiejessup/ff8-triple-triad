@@ -4,9 +4,8 @@
 
 module Logic where
 
-import Data.Generics.Wrapped (_Unwrapped)
-import Data.Vector ((!), (//))
-import Optics ((!~), (%!~))
+import Data.Sequence qualified as Seq
+import Optics ((!~))
 import Types
 
 invertDirection :: Direction -> Direction
@@ -39,8 +38,8 @@ cardPointsInDirection Card {n, e, s, w} = \case
 
 -- Low-level
 boardSpaceSet :: BoardIx -> BoardCard -> Board -> Board
-boardSpaceSet ix bc =
-  _Unwrapped %!~ (// [(unBoardIx ix, Just bc)])
+boardSpaceSet ix bc (Board b) =
+  Board $ Seq.update (unBoardIx ix) (Just bc) b
 
 boardSpaceFlip :: Board -> BoardIx -> Board
 boardSpaceFlip b ix =
@@ -53,9 +52,9 @@ boardSpaceFlip b ix =
 
 pluckFromHand :: Hand -> HandIx -> (Card, Hand)
 pluckFromHand Hand {unHand = h} HandIx {unHandIx = hIx} =
-  case h ! hIx of
+  case h `Seq.index` hIx of
     Nothing -> error "Card not present"
-    Just c -> (c, Hand {unHand = h // [(hIx, Nothing)]})
+    Just c -> (c, Hand $ Seq.update hIx Nothing h)
 
 -- Constructionally correct API.
 

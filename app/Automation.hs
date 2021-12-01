@@ -4,35 +4,32 @@
 
 module Automation where
 
+import Data.Foldable (maximum, maximumBy)
+import Data.Sequence qualified as Seq
 import Data.Tree (Tree)
 import Data.Tree qualified as T
-import Data.Vector (Vector)
-import Data.Vector qualified as V
 import Logic
 import Types
 
-possibleHandIxs :: Hand -> Vector HandIx
-possibleHandIxs h = HandIx <$> V.findIndices isJust (unHand h)
+possibleHandIxs :: Hand -> [HandIx]
+possibleHandIxs h = HandIx <$> Seq.findIndicesL isJust (unHand h)
 
-possibleRelevantHandIxs :: Game -> Vector HandIx
+possibleRelevantHandIxs :: Game -> [HandIx]
 possibleRelevantHandIxs g = possibleHandIxs (relevantHand g)
 
-possibleBoardIxs :: Board -> Vector BoardIx
-possibleBoardIxs b = BoardIx <$> V.findIndices isNothing (unBoard b)
+possibleBoardIxs :: Board -> [BoardIx]
+possibleBoardIxs b = BoardIx <$> Seq.findIndicesL isNothing (unBoard b)
 
-possibleNextPlays :: Game -> Vector (HandIx, BoardIx)
+possibleNextPlays :: Game -> [(HandIx, BoardIx)]
 possibleNextPlays g = do
   nextHix <- possibleRelevantHandIxs g
   nextBix <- possibleBoardIxs $ board g
   pure (nextHix, nextBix)
 
-possibleNextGames :: Game -> Vector Game
+possibleNextGames :: Game -> [Game]
 possibleNextGames g = do
   (nextHix, nextBix) <- possibleNextPlays g
   pure $ playCard nextHix nextBix g
-
-possibleNextGames' :: Vector Game -> Vector Game
-possibleNextGames' = (>>= possibleNextGames)
 
 countGames :: (Int, Int) -> Bool -> Int
 countGames (p1Cards, p2Cards) isP1 =
@@ -52,18 +49,18 @@ countGames (p1Cards, p2Cards) isP1 =
         then 1
         else nrPlaysNow * countGames newHands (not isP1)
 
-bestNextGame :: Game -> Maybe (Int, Vector ((HandIx, BoardIx), Game))
+bestNextGame :: Game -> Maybe (Int, [((HandIx, BoardIx), Game)])
 bestNextGame g0 =
   case possibleNextPlays g0 of
     [] -> Nothing
     nextPlays ->
       let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
           nextValues = gameValue (turn g0) <$> nextGames
-          bestValue = V.maximum nextValues
+          bestValue = maximum nextValues
 
-          nexts = V.zip3 nextPlays nextGames nextValues
+          nexts = zip3 nextPlays nextGames nextValues
 
-          bests = V.filter (\(_, _, v) -> v == bestValue) nexts
+          bests = filter (\(_, _, v) -> v == bestValue) nexts
        in Just (bestValue, bests <&> \(p, g, _v) -> (p, g))
 
 anyBestNextGame :: Game -> Maybe Game
@@ -72,8 +69,9 @@ anyBestNextGame g0 =
     [] -> Nothing
     nextPlays ->
       let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-          nextValues = gameValue (turn g0) <$> nextGames
-       in Just (nextGames V.! V.maxIndex nextValues)
+          nextValues = nextGames <&> \g -> (g, gameValue (turn g0) g)
+          best = fst $ maximumBy (\(_, a) (_, b) -> compare a b) nextValues
+       in Just best
 
 compareGameValues :: Player -> Game -> Game -> Ordering
 compareGameValues p a b = compare (gameValue p a) (gameValue p b)
@@ -86,7 +84,7 @@ gameValue evalPlayer g =
     nextGames ->
       let turnPlayer = turn g
 
-          valueToTurnPlayer = V.maximum (gameValue turnPlayer <$> nextGames)
+          valueToTurnPlayer = maximum (gameValue turnPlayer <$> nextGames)
 
           valueToEvalPlayer = if evalPlayer == turnPlayer then valueToTurnPlayer else 10 - valueToTurnPlayer
        in valueToEvalPlayer

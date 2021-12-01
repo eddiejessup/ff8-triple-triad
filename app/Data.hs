@@ -5,7 +5,6 @@
 module Data where
 
 import Data.HashMap.Strict qualified as HM
-import Data.Vector (Vector)
 import Types
 
 cardLib :: HashMap Text Card
@@ -23,7 +22,7 @@ cardLib =
     ("Cockatrice", Card 2 1 2 6)
   ]
 
-newHandFromNames :: Vector Text -> Hand
+newHandFromNames :: Seq Text -> Hand
 newHandFromNames ks =
   let cards =
         ks <&> \k -> case k `HM.lookup` cardLib of

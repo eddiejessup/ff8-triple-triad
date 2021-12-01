@@ -5,8 +5,8 @@ module Types where
 
 import Data.Generics.Wrapped (_Unwrapped)
 import Data.Maybe.Optics (_Just)
-import Data.Vector (Vector, (!))
-import Data.Vector qualified as V
+import Data.Sequence qualified as Seq
+import Data.Vector (Vector)
 import Optics (Fold, folded, to, (%), (^.))
 import Optics qualified as O
 import Optics.Lens (Lens', lens)
@@ -32,11 +32,11 @@ data BoardCard = BoardCard {ownedCard :: OwnedCard, turnPlayer :: Player, turnIx
 -- 0 1 2
 -- 3 4 5
 -- 6 7 8
-newtype Board = Board {unBoard :: Vector (Maybe BoardCard)}
+newtype Board = Board {unBoard :: Seq (Maybe BoardCard)}
   deriving (Show, Generic)
 
 emptyBoard :: Board
-emptyBoard = Board $ V.replicate 9 Nothing
+emptyBoard = Board $ Seq.replicate 9 Nothing
 
 boardCardsFold :: Fold Board BoardCard
 boardCardsFold = _Unwrapped % folded % _Just
@@ -80,7 +80,7 @@ toNice ix = case ix ^. _Unwrapped of
 
 boardAt :: Board -> BoardIx -> Maybe BoardCard
 boardAt b ix =
-  (b ^. _Unwrapped) ! (ix ^. _Unwrapped)
+  unBoard b `Seq.index` unBoardIx ix
 
 boardRow :: Board -> RowPos -> Vector (Maybe BoardCard)
 boardRow b r = [CLeft, CMid, CRight] <&> \c -> boardAt b (fromNice (r, c))
@@ -96,10 +96,10 @@ curTurnIx = nrCardsOnBoard
 
 -- maybe 0 succ (O.maximumOf (boardCardsFold % #turnIx) b)
 
-newtype Hand = Hand {unHand :: Vector (Maybe Card)}
+newtype Hand = Hand {unHand :: Seq (Maybe Card)}
   deriving (Show, Generic)
 
-newHand :: Vector Card -> Hand
+newHand :: Seq Card -> Hand
 newHand = Hand . fmap Just
 
 handCardsFold :: Fold Hand Card
@@ -142,7 +142,7 @@ score p =
 
 nrCardsOnBoard :: Board -> Int
 nrCardsOnBoard b =
-  V.sum $
+  sum $
     unBoard b <&> \case
       Nothing -> 0
       Just _ -> 1
@@ -150,7 +150,7 @@ nrCardsOnBoard b =
 scoreAlt :: Player -> Game -> Int
 scoreAlt p g =
   let netFlipToP1 =
-        V.sum $
+        sum $
           unBoard (board g) <&> \case
             Nothing -> 0
             Just bc -> flipToP1 bc
