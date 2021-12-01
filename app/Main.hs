@@ -5,6 +5,7 @@
 module Main where
 
 import Automation
+import Data
 import Data.Generics.Wrapped (_Unwrapped)
 import Data.List ((!!))
 import Data.Text qualified as Tx
@@ -18,17 +19,11 @@ import Logic
 import Optics ((^.))
 import Types
 
-card1 :: Card
-card1 = Card {n = 1, e = 2, s = 3, w = 4}
-
-cardBest :: Card
-cardBest = Card {n = 10, e = 10, s = 10, w = 1}
-
 hand1 :: Hand
-hand1 = Hand [Just card1, Just cardBest, Just card1, Just cardBest, Just card1]
+hand1 = newHandFromNames ["Geezard", "Geezard", "Bite Bug", "Funguar", "Fasticholon-F"]
 
 hand2 :: Hand
-hand2 = Hand [Just cardBest, Just card1, Just card1, Just cardBest, Just card1]
+hand2 = newHandFromNames ["Blood Soul", "Caterchapillar", "Cockatrice", "Funguar", "Red Bat"]
 
 -- board1 :: Board
 -- board1 = Board

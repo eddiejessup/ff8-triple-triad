@@ -4,11 +4,9 @@
 
 module Logic where
 
-import Data.Generics.Product (field)
 import Data.Generics.Wrapped (_Unwrapped)
 import Data.Vector ((!), (//))
-import Optics ((%), (%~), (^.))
-import Optics qualified as O
+import Optics ((!~), (%!~))
 import Types
 
 invertDirection :: Direction -> Direction
@@ -42,7 +40,7 @@ cardPointsInDirection Card {n, e, s, w} = \case
 -- Low-level
 boardSpaceSet :: BoardIx -> BoardCard -> Board -> Board
 boardSpaceSet ix bc =
-  _Unwrapped O.%~ (// [(ix ^. _Unwrapped, Just bc)])
+  _Unwrapped %!~ (// [(unBoardIx ix, Just bc)])
 
 boardSpaceFlip :: Board -> BoardIx -> Board
 boardSpaceFlip b ix =
@@ -72,13 +70,13 @@ addCardToBoard b ix oc@OwnedCard {card, player} =
               adjs <&> \(adjIx, dirToAdj) -> case boardAt b adjIx of
                 Nothing -> Nothing
                 Just bc ->
-                  let OwnedCard {card = adjCard, player = adjPlayer} = bc ^. #ownedCard
+                  let OwnedCard {card = adjCard, player = adjPlayer} = ownedCard bc
                    in if
                           | player == adjPlayer -> Nothing
                           | cardPointsInDirection card dirToAdj <= cardPointsInDirection adjCard (invertDirection dirToAdj) -> Nothing
                           | otherwise -> Just adjIx
 
-          boardCard = BoardCard oc (oc ^. #player) (curTurnIx b)
+          boardCard = BoardCard oc player (curTurnIx b)
 
           boardAfterAdd = boardSpaceSet ix boardCard b
 
@@ -88,10 +86,10 @@ addCardToBoard b ix oc@OwnedCard {card, player} =
 
 playCard :: HandIx -> BoardIx -> Game -> Game
 playCard hIx bIx g@Game {board, turn} =
-  let (playedCard, pluckedHand) = pluckFromHand (O.view relevantHandL g) hIx
+  let (playedCard, pluckedHand) = pluckFromHand (relevantHand g) hIx
 
       playedBoard = addCardToBoard board bIx (OwnedCard playedCard turn)
    in g
-        & O.set relevantHandL pluckedHand
-        & O.set #board playedBoard
-        & O.set #turn (otherPlayer turn)
+        & relevantHandL !~ pluckedHand
+        & #board !~ playedBoard
+        & #turn !~ otherPlayer turn

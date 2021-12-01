@@ -99,6 +99,9 @@ curTurnIx = nrCardsOnBoard
 newtype Hand = Hand {unHand :: Vector (Maybe Card)}
   deriving (Show, Generic)
 
+newHand :: Vector Card -> Hand
+newHand = Hand . fmap Just
+
 handCardsFold :: Fold Hand Card
 handCardsFold = _Unwrapped % folded % _Just
 

@@ -4,24 +4,21 @@
 
 module Automation where
 
-import Data.Generics.Wrapped (_Unwrapped)
 import Data.Tree (Tree)
 import Data.Tree qualified as T
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Logic
-import Optics (to, (%), (^.))
 import Types
 
 possibleHandIxs :: Hand -> Vector HandIx
-possibleHandIxs h = HandIx <$> V.findIndices isJust (h ^. _Unwrapped)
+possibleHandIxs h = HandIx <$> V.findIndices isJust (unHand h)
 
 possibleRelevantHandIxs :: Game -> Vector HandIx
--- possibleRelevantHandIxs g = g ^. relevantHandL % to possibleHandIxs
 possibleRelevantHandIxs g = possibleHandIxs (relevantHand g)
 
 possibleBoardIxs :: Board -> Vector BoardIx
-possibleBoardIxs b = BoardIx <$> V.findIndices isNothing (b ^. _Unwrapped)
+possibleBoardIxs b = BoardIx <$> V.findIndices isNothing (unBoard b)
 
 possibleNextPlays :: Game -> Vector (HandIx, BoardIx)
 possibleNextPlays g = do
@@ -61,7 +58,7 @@ bestNextGame g0 =
     [] -> Nothing
     nextPlays ->
       let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-          nextValues = gameValue (g0 ^. #turn) <$> nextGames
+          nextValues = gameValue (turn g0) <$> nextGames
           bestValue = V.maximum nextValues
 
           nexts = V.zip3 nextPlays nextGames nextValues
@@ -75,7 +72,7 @@ anyBestNextGame g0 =
     [] -> Nothing
     nextPlays ->
       let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-          nextValues = gameValue (g0 ^. #turn) <$> nextGames
+          nextValues = gameValue (turn g0) <$> nextGames
        in Just (nextGames V.! V.maxIndex nextValues)
 
 compareGameValues :: Player -> Game -> Game -> Ordering
@@ -87,7 +84,7 @@ gameValue evalPlayer g =
     [] ->
       scoreAlt evalPlayer g
     nextGames ->
-      let turnPlayer = (g ^. #turn)
+      let turnPlayer = turn g
 
           valueToTurnPlayer = V.maximum (gameValue turnPlayer <$> nextGames)
 
