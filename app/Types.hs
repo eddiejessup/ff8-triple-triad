@@ -6,10 +6,8 @@ module Types where
 import Data.Generics.Wrapped (_Unwrapped)
 import Data.Maybe.Optics (_Just)
 import Data.Sequence qualified as Seq
-import Data.Vector (Vector)
-import Optics (Fold, folded, to, (%), (^.))
+import Optics (Fold, Setter', folded, sets, to, (%), (^.))
 import Optics qualified as O
-import Optics.Lens (Lens', lens)
 
 data Card = Card {n, e, s, w :: Int}
   deriving (Show, Eq, Generic)
@@ -82,19 +80,14 @@ boardAt :: Board -> BoardIx -> Maybe BoardCard
 boardAt b ix =
   unBoard b `Seq.index` unBoardIx ix
 
-boardRow :: Board -> RowPos -> Vector (Maybe BoardCard)
+boardRow :: Board -> RowPos -> [Maybe BoardCard]
 boardRow b r = [CLeft, CMid, CRight] <&> \c -> boardAt b (fromNice (r, c))
 
-boardCol :: Board -> ColPos -> Vector (Maybe BoardCard)
+boardCol :: Board -> ColPos -> [Maybe BoardCard]
 boardCol b c = [RTop, RMid, RBot] <&> \r -> boardAt b (fromNice (r, c))
 
 data Direction = North | East | South | West
   deriving (Show, Generic)
-
-curTurnIx :: Board -> Int
-curTurnIx = nrCardsOnBoard
-
--- maybe 0 succ (O.maximumOf (boardCardsFold % #turnIx) b)
 
 newtype Hand = Hand {unHand :: Seq (Maybe Card)}
   deriving (Show, Generic)
@@ -116,13 +109,13 @@ relevantHand Game {turn, p1Hand, p2Hand} = case turn of
   P1 -> p1Hand
   P2 -> p2Hand
 
-setRelevantHand :: Game -> Hand -> Game
-setRelevantHand g@Game {turn} h = case turn of
-  P1 -> g {p1Hand = h}
-  P2 -> g {p2Hand = h}
-
-relevantHandL :: Lens' Game Hand
-relevantHandL = lens relevantHand setRelevantHand
+relevantHandSetter :: Setter' Game Hand
+relevantHandSetter = sets setRelevantHand
+  where
+    setRelevantHand :: (Hand -> Hand) -> Game -> Game
+    setRelevantHand f g@Game {p1Hand, p2Hand, turn} = case turn of
+      P1 -> g {p1Hand = f p1Hand}
+      P2 -> g {p2Hand = f p2Hand}
 
 gameCardsFold :: Fold Game OwnedCard
 gameCardsFold =
@@ -142,10 +135,7 @@ score p =
 
 nrCardsOnBoard :: Board -> Int
 nrCardsOnBoard b =
-  sum $
-    unBoard b <&> \case
-      Nothing -> 0
-      Just _ -> 1
+  foldl' (\n v -> if isJust v then n + 1 else n) 0 (unBoard b)
 
 scoreAlt :: Player -> Game -> Int
 scoreAlt p g =

@@ -10,7 +10,6 @@ import Data.Generics.Wrapped (_Unwrapped)
 import Data.List (head, (!!))
 import Data.Text qualified as Tx
 import Data.Text.Read qualified as Tx.R
-import Data.Vector qualified as V
 import Diagrams qualified as D
 import Diagrams.Backend.SVG qualified as D.SVG
 import Diagrams.Backend.SVG.CmdLine qualified as D.Cmd
@@ -48,7 +47,8 @@ game =
   game0 P1
     & playCard (HandIx 0) (fromNice (RTop, CRight))
     & playCard (HandIx 0) (fromNice (RMid, CRight))
-    & playCard (HandIx 1) (fromNice (RBot, CRight))
+
+-- & playCard (HandIx 1) (fromNice (RBot, CRight))
 
 -- & playCard (HandIx 1) (fromNice (RTop, CMid))
 -- & playCard (HandIx 2) (fromNice (RMid, CMid))
@@ -57,8 +57,8 @@ game =
 -- & playCard (HandIx 3) (fromNice (RTop, CLeft))
 -- & playCard (HandIx 3) (fromNice (RMid, CLeft))
 
-optimalGame :: Game -> V.Vector Game
-optimalGame = V.unfoldr go
+optimalGame :: Game -> [Game]
+optimalGame = unfoldr go
   where
     go g =
       case anyBestNextGame g of

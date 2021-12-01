@@ -17,17 +17,18 @@ invertDirection = \case
 
 adjacents :: BoardIx -> [(BoardIx, Direction)]
 adjacents ix =
-  let raw = case toNice ix of
-        (RTop, CLeft) -> [((RTop, CMid), East), ((RMid, CLeft), South)]
-        (RTop, CMid) -> [((RTop, CLeft), West), ((RMid, CMid), South), ((RTop, CRight), East)]
-        (RTop, CRight) -> [((RTop, CMid), West), ((RMid, CRight), South)]
-        (RMid, CLeft) -> [((RTop, CLeft), North), ((RMid, CMid), East), ((RBot, CLeft), South)]
-        (RMid, CMid) -> [((RTop, CMid), North), ((RMid, CLeft), West), ((RMid, CRight), East), ((RBot, CMid), South)]
-        (RMid, CRight) -> [((RMid, CMid), West), ((RTop, CRight), North), ((RBot, CRight), South)]
-        (RBot, CLeft) -> [((RMid, CLeft), North), ((RBot, CMid), East)]
-        (RBot, CMid) -> [((RBot, CLeft), West), ((RBot, CRight), East), ((RMid, CMid), North)]
-        (RBot, CRight) -> [((RBot, CMid), West), ((RMid, CRight), North)]
-   in raw <&> first fromNice
+  let raw = case unBoardIx ix of
+        0 -> [(1, East), (3, South)]
+        1 -> [(0, West), (4, South), (2, East)]
+        2 -> [(1, West), (5, South)]
+        3 -> [(0, North), (4, East), (6, South)]
+        4 -> [(1, North), (3, West), (5, East), (7, South)]
+        5 -> [(4, West), (2, North), (8, South)]
+        6 -> [(3, North), (7, East)]
+        7 -> [(6, West), (8, East), (4, North)]
+        8 -> [(7, West), (5, North)]
+        _ -> error "Impossible"
+   in raw <&> first BoardIx
 
 cardPointsInDirection :: Card -> Direction -> Int
 cardPointsInDirection Card {n, e, s, w} = \case
@@ -66,16 +67,14 @@ addCardToBoard b ix oc@OwnedCard {card, player} =
 
           ixsToFlip =
             catMaybes $
-              adjs <&> \(adjIx, dirToAdj) -> case boardAt b adjIx of
-                Nothing -> Nothing
-                Just bc ->
-                  let OwnedCard {card = adjCard, player = adjPlayer} = ownedCard bc
-                   in if
-                          | player == adjPlayer -> Nothing
-                          | cardPointsInDirection card dirToAdj <= cardPointsInDirection adjCard (invertDirection dirToAdj) -> Nothing
-                          | otherwise -> Just adjIx
+              adjs <&> \(adjIx, dirToAdj) -> do
+                bc <- boardAt b adjIx
+                let OwnedCard {card = adjCard, player = adjPlayer} = ownedCard bc
+                guard (player /= adjPlayer)
+                guard (cardPointsInDirection card dirToAdj > cardPointsInDirection adjCard (invertDirection dirToAdj))
+                pure adjIx
 
-          boardCard = BoardCard oc player (curTurnIx b)
+          boardCard = BoardCard oc player (nrCardsOnBoard b)
 
           boardAfterAdd = boardSpaceSet ix boardCard b
 
@@ -89,6 +88,6 @@ playCard hIx bIx g@Game {board, turn} =
 
       playedBoard = addCardToBoard board bIx (OwnedCard playedCard turn)
    in g
-        & relevantHandL !~ pluckedHand
+        & relevantHandSetter !~ pluckedHand
         & #board !~ playedBoard
         & #turn !~ otherPlayer turn

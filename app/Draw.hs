@@ -4,7 +4,7 @@
 
 module Draw where
 
-import Data.Vector ((!))
+import Data.List ((!!))
 import Diagrams hiding (turn)
 import Diagrams.Backend.SVG.CmdLine (B)
 import Diagrams.Prelude qualified as D
@@ -66,7 +66,7 @@ boardDiagram b =
   where
     bd x = (boardSpaceDiagram x # D.scale 0.9) <> (D.square 1 # D.opacity 0)
 
-    rowDiag row = bd (row ! 0) ||| bd (row ! 1) ||| bd (row ! 2)
+    rowDiag row = bd (row !! 0) ||| bd (row !! 1) ||| bd (row !! 2)
 
 handDiagram :: Player -> Hand -> Diagram B
 handDiagram p Hand {unHand} =
