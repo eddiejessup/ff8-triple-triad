@@ -1,0 +1,10 @@
+cradle:
+  cabal:
+    - path: "app/Main.hs"
+      component: "ff8-cards:exe:ff8-cards-dev"
+
+    - path: "app/Main.hs"
+      component: "ff8-cards:exe:ff8-cards"
+
+    - path: "app/Main.hs"
+      component: "ff8-cards:exe:ff8-cards-prof"

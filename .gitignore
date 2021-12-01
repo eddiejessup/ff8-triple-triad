@@ -1,0 +1,6 @@
+*.svg
+*.aux
+*.prof
+*.ps
+*.hp
+dist-newstyle
