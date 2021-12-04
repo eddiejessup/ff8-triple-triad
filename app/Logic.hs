@@ -1,7 +1,3 @@
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module Logic where
 
 import Data.Sequence qualified as Seq
@@ -15,20 +11,25 @@ invertDirection = \case
   East -> West
   West -> East
 
-adjacents :: BoardIx -> [(BoardIx, Direction)]
-adjacents ix =
-  let raw = case unBoardIx ix of
-        0 -> [(1, East), (3, South)]
-        1 -> [(0, West), (4, South), (2, East)]
-        2 -> [(1, West), (5, South)]
-        3 -> [(0, North), (4, East), (6, South)]
-        4 -> [(1, North), (3, West), (5, East), (7, South)]
-        5 -> [(4, West), (2, North), (8, South)]
-        6 -> [(3, North), (7, East)]
-        7 -> [(6, West), (8, East), (4, North)]
-        8 -> [(7, West), (5, North)]
-        _ -> error "Impossible"
-   in raw <&> first BoardIx
+flippedBoardIxs :: Board -> OwnedCard -> BoardIx -> [BoardIx]
+flippedBoardIxs b OwnedCard {card = srcCard, player = srcP} ix =
+  catMaybes $ case unBoardIx ix of
+    0 -> [boardAtUnsafe 1 e w, boardAtUnsafe 3 s n]
+    1 -> [boardAtUnsafe 0 w e, boardAtUnsafe 4 s n, boardAtUnsafe 2 e w]
+    2 -> [boardAtUnsafe 1 w e, boardAtUnsafe 5 s n]
+    3 -> [boardAtUnsafe 0 n s, boardAtUnsafe 4 e w, boardAtUnsafe 6 s n]
+    4 -> [boardAtUnsafe 1 n s, boardAtUnsafe 3 w e, boardAtUnsafe 5 e w, boardAtUnsafe 7 s n]
+    5 -> [boardAtUnsafe 4 w e, boardAtUnsafe 2 n s, boardAtUnsafe 8 s n]
+    6 -> [boardAtUnsafe 3 n s, boardAtUnsafe 7 e w]
+    7 -> [boardAtUnsafe 6 w e, boardAtUnsafe 8 e w, boardAtUnsafe 4 n s]
+    8 -> [boardAtUnsafe 7 w e, boardAtUnsafe 5 n s]
+    _ -> error "Impossible"
+  where
+    boardAtUnsafe :: Int -> (Card -> Int) -> (Card -> Int) -> Maybe BoardIx
+    boardAtUnsafe i srcGetter tgtGetter = do
+      BoardCard (OwnedCard {card = tgtCard, player = tgtP}) _ _ <- unBoard b `Seq.index` i
+      guard (srcP /= tgtP && srcGetter srcCard > tgtGetter tgtCard)
+      pure $ BoardIx i
 
 cardPointsInDirection :: Card -> Direction -> Int
 cardPointsInDirection Card {n, e, s, w} = \case
@@ -60,26 +61,12 @@ pluckFromHand Hand {unHand = h} HandIx {unHandIx = hIx} =
 -- Constructionally correct API.
 
 addCardToBoard :: Board -> BoardIx -> OwnedCard -> Board
-addCardToBoard b ix oc@OwnedCard {card, player} =
+addCardToBoard b ix oc@OwnedCard {player} =
   case boardAt b ix of
     Nothing ->
-      let adjs = adjacents ix
-
-          ixsToFlip =
-            catMaybes $
-              adjs <&> \(adjIx, dirToAdj) -> do
-                bc <- boardAt b adjIx
-                let OwnedCard {card = adjCard, player = adjPlayer} = ownedCard bc
-                guard (player /= adjPlayer)
-                guard (cardPointsInDirection card dirToAdj > cardPointsInDirection adjCard (invertDirection dirToAdj))
-                pure adjIx
-
-          boardCard = BoardCard oc player (nrCardsOnBoard b)
-
-          boardAfterAdd = boardSpaceSet ix boardCard b
-
-          boardAfterFlippings = foldl' boardSpaceFlip boardAfterAdd ixsToFlip
-       in boardAfterFlippings
+      let ixsToFlip = flippedBoardIxs b oc ix
+          boardAfterAdd = boardSpaceSet ix (BoardCard oc player (nrCardsOnBoard b)) b
+       in foldl' boardSpaceFlip boardAfterAdd ixsToFlip
     Just _ -> error "Board space already inhabited"
 
 playCard :: HandIx -> BoardIx -> Game -> Game

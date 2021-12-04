@@ -1,7 +1,3 @@
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module Data where
 
 import Data.HashMap.Strict qualified as HM
@@ -19,7 +15,8 @@ cardLib =
     ("Fasticholon-F", Card 3 5 2 1),
     ("Blood Soul", Card 2 1 6 1),
     ("Caterchapillar", Card 4 2 4 3),
-    ("Cockatrice", Card 2 1 2 6)
+    ("Cockatrice", Card 2 1 2 6),
+    ("Best", cardBest)
   ]
 
 newHandFromNames :: Seq Text -> Hand

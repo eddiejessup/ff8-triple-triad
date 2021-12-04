@@ -1,13 +1,10 @@
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module Draw where
 
 import Data.List ((!!))
 import Diagrams hiding (turn)
 import Diagrams.Backend.SVG.CmdLine (B)
 import Diagrams.Prelude qualified as D
+import Nice
 import Types
 
 playerColor :: Maybe Player -> D.Colour Double
@@ -23,7 +20,7 @@ altPlayerColor = \case
   Nothing -> D.purple
 
 cardDiagram :: Maybe Player -> Card -> D.Diagram B
-cardDiagram mayP Card {..} =
+cardDiagram mayP Card {w, e, s, n} =
   mkText w (-1, 0)
     <> mkText e (1, 0)
     <> mkText s (0, -1)

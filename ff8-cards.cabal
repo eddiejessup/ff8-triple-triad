@@ -43,6 +43,8 @@ common common-all
       MultiParamTypeClasses
       MultiWayIf
       NamedFieldPuns
+      OverloadedLists
+      OverloadedLabels
       OverloadedStrings
       ScopedTypeVariables
       StandaloneDeriving
@@ -65,7 +67,7 @@ common common-all
 
 common common-exec
     import:        common-all
-    other-modules: Draw, Types, Logic, Automation, Data
+    other-modules: Draw, Types, Logic, Automation, Data, Play, Nice
     hs-source-dirs:   app
 
 executable ff8-cards-dev

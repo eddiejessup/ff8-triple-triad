@@ -1,10 +1,7 @@
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module Automation where
 
 import Data.Foldable (maximum, maximumBy)
+import Data.List.NonEmpty qualified as NE
 import Data.Sequence qualified as Seq
 import Data.Tree (Tree)
 import Data.Tree qualified as T
@@ -20,7 +17,7 @@ possibleRelevantHandIxs g = possibleHandIxs (relevantHand g)
 possibleBoardIxs :: Board -> [BoardIx]
 possibleBoardIxs b = BoardIx <$> Seq.findIndicesL isNothing (unBoard b)
 
-possibleNextPlays :: Game -> [(HandIx, BoardIx)]
+possibleNextPlays :: Game -> [Play]
 possibleNextPlays g = do
   nextHix <- possibleRelevantHandIxs g
   nextBix <- possibleBoardIxs $ board g
@@ -49,29 +46,34 @@ countGames (p1Cards, p2Cards) isP1 =
         then 1
         else nrPlaysNow * countGames newHands (not isP1)
 
-bestNextGame :: Game -> Maybe (Int, [((HandIx, BoardIx), Game)])
-bestNextGame g0 =
-  case possibleNextPlays g0 of
-    [] -> Nothing
-    nextPlays ->
-      let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-          nextValues = gameValue (turn g0) <$> nextGames
-          bestValue = maximum nextValues
+bestNextGames :: Game -> Maybe (Int, NonEmpty (Play, Game))
+bestNextGames g0 = do
+  nextPlays <- nonEmpty (possibleNextPlays g0)
+  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
+      nextValues = nextGames <&> gameValue (turn g0)
+      bestValue = maximum nextValues
+      nexts = NE.zip (NE.zip nextPlays nextGames) nextValues
+  bests <- nonEmpty $ NE.filter (\((_, _), v) -> v == bestValue) nexts
+  pure (bestValue, bests <&> fst)
 
-          nexts = zip3 nextPlays nextGames nextValues
+aBestNextGame :: Game -> Maybe (Int, (Play, Game))
+aBestNextGame g0 = do
+  (bestScore, bests) <- bestNextGames g0
+  pure (bestScore, last bests)
 
-          bests = filter (\(_, _, v) -> v == bestValue) nexts
-       in Just (bestValue, bests <&> \(p, g, _v) -> (p, g))
+aBestNextGameFast :: Game -> Maybe Game
+aBestNextGameFast g0 = do
+  nextPlays <- nonEmpty $ possibleNextPlays g0
+  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
+      nextValues = nextGames <&> \g -> (g, gameValue (turn g0) g)
+      best = fst $ maximumBy (\(_, a) (_, b) -> compare a b) nextValues
+   in Just best
 
-anyBestNextGame :: Game -> Maybe Game
-anyBestNextGame g0 =
-  case possibleNextPlays g0 of
-    [] -> Nothing
-    nextPlays ->
-      let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-          nextValues = nextGames <&> \g -> (g, gameValue (turn g0) g)
-          best = fst $ maximumBy (\(_, a) (_, b) -> compare a b) nextValues
-       in Just best
+optimalGame :: Game -> [Game]
+optimalGame = unfoldr go
+  where
+    go g =
+      aBestNextGameFast g <&> \best -> (best, best)
 
 compareGameValues :: Player -> Game -> Game -> Ordering
 compareGameValues p a b = compare (gameValue p a) (gameValue p b)
@@ -80,7 +82,7 @@ gameValue :: Player -> Game -> Int
 gameValue evalPlayer g =
   case possibleNextGames g of
     [] ->
-      scoreAlt evalPlayer g
+      score evalPlayer g
     nextGames ->
       let turnPlayer = turn g
 

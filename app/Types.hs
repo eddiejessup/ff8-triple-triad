@@ -1,12 +1,9 @@
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE OverloadedLists #-}
-
 module Types where
 
 import Data.Generics.Wrapped (_Unwrapped)
 import Data.Maybe.Optics (_Just)
 import Data.Sequence qualified as Seq
-import Optics (Fold, Setter', folded, sets, to, (%), (^.))
+import Optics (Fold, Setter', folded, sets, to, (%))
 import Optics qualified as O
 
 data Card = Card {n, e, s, w :: Int}
@@ -42,55 +39,23 @@ boardCardsFold = _Unwrapped % folded % _Just
 newtype BoardIx = BoardIx {unBoardIx :: Int}
   deriving (Show, Generic)
 
+boardAt :: Board -> BoardIx -> Maybe BoardCard
+boardAt b ix =
+  unBoard b `Seq.index` unBoardIx ix
+
 data RowPos = RTop | RMid | RBot
   deriving (Show, Generic)
 
 data ColPos = CLeft | CMid | CRight
   deriving (Show, Generic)
 
-type NiceBoardIx = (RowPos, ColPos)
-
-fromNice :: NiceBoardIx -> BoardIx
-fromNice (r, c) = BoardIx $ 3 * rowToInt r + colToInt c
-  where
-    rowToInt = \case
-      RTop -> 0
-      RMid -> 1
-      RBot -> 2
-
-    colToInt = \case
-      CLeft -> 0
-      CMid -> 1
-      CRight -> 2
-
-toNice :: BoardIx -> NiceBoardIx
-toNice ix = case ix ^. _Unwrapped of
-  0 -> (RTop, CLeft)
-  1 -> (RTop, CMid)
-  2 -> (RTop, CRight)
-  3 -> (RMid, CLeft)
-  4 -> (RMid, CMid)
-  5 -> (RMid, CRight)
-  6 -> (RBot, CLeft)
-  7 -> (RBot, CMid)
-  8 -> (RBot, CRight)
-  _ -> error "Bad index"
-
-boardAt :: Board -> BoardIx -> Maybe BoardCard
-boardAt b ix =
-  unBoard b `Seq.index` unBoardIx ix
-
-boardRow :: Board -> RowPos -> [Maybe BoardCard]
-boardRow b r = [CLeft, CMid, CRight] <&> \c -> boardAt b (fromNice (r, c))
-
-boardCol :: Board -> ColPos -> [Maybe BoardCard]
-boardCol b c = [RTop, RMid, RBot] <&> \r -> boardAt b (fromNice (r, c))
-
 data Direction = North | East | South | West
   deriving (Show, Generic)
 
 newtype Hand = Hand {unHand :: Seq (Maybe Card)}
   deriving (Show, Generic)
+
+type Play = (HandIx, BoardIx)
 
 newHand :: Seq Card -> Hand
 newHand = Hand . fmap Just
@@ -129,26 +94,23 @@ gameCardsFold =
       boardCards = #board % boardCardsFold % #ownedCard
    in p1HandCards `O.summing` p2HandCards `O.summing` boardCards
 
-score :: Player -> Game -> Int
-score p =
-  O.lengthOf (gameCardsFold % #player % O.filtered (p ==))
-
 nrCardsOnBoard :: Board -> Int
-nrCardsOnBoard b =
-  foldl' (\n v -> if isJust v then n + 1 else n) 0 (unBoard b)
+nrCardsOnBoard = countWhere isJust . unBoard
 
-scoreAlt :: Player -> Game -> Int
-scoreAlt p g =
-  let netFlipToP1 =
-        sum $
-          unBoard (board g) <&> \case
-            Nothing -> 0
-            Just bc -> flipToP1 bc
+{-# INLINE countWhere #-}
+countWhere :: (a -> Bool) -> Seq a -> Int
+countWhere f = foldl' (\n v -> if f v then n + 1 else n) 0
+
+score :: Player -> Game -> Int
+score p g =
+  let netChangeToP2 =
+        foldl' (\n v -> n + changeToP2 v) 0 (unBoard (board g))
    in case p of
-        P1 -> 5 + netFlipToP1
-        P2 -> 5 - netFlipToP1
+        P1 -> 5 - netChangeToP2
+        P2 -> 5 + netChangeToP2
   where
-    flipToP1 :: BoardCard -> Int
-    flipToP1 bc =
-      let origOwner = turnPlayer bc
-       in if origOwner /= player (ownedCard bc) then (if origOwner == P2 then 1 else -1) else 0
+    {-# INLINE changeToP2 #-}
+    changeToP2 = \case
+      Just (BoardCard (OwnedCard _ P2) P1 _) -> 1
+      Just (BoardCard (OwnedCard _ P1) P2 _) -> -1
+      _ -> 0
