@@ -2,11 +2,8 @@ module Main where
 
 import Automation
 import Data
-import Diagrams.Backend.SVG.CmdLine qualified as D.Cmd
-import Draw
 import Logic
 import Nice
-import Play
 import Types
 import Prelude hiding (head)
 
@@ -28,7 +25,5 @@ game =
 main :: IO ()
 main = do
   let optGame = optimalGame game
-  D.Cmd.mainWith (gamesDiagram optGame)
-
-  hSetBuffering stdin NoBuffering
-  playGame P2 game
+  let Just lastOptGame = viaNonEmpty last optGame
+  print $ score P1 lastOptGame

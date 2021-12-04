@@ -1,10 +1,13 @@
 cradle:
   cabal:
+    - path: "lib"
+      component: "lib:ff8-cards"
+
     - path: "app/Main.hs"
       component: "ff8-cards:exe:ff8-cards-dev"
 
     - path: "app/Main.hs"
       component: "ff8-cards:exe:ff8-cards"
 
-    - path: "app/Main.hs"
+    - path: "bench/Main.hs"
       component: "ff8-cards:exe:ff8-cards-prof"
