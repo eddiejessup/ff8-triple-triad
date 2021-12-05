@@ -4,10 +4,10 @@ cradle:
       component: "lib:ff8-cards"
 
     - path: "app/Main.hs"
-      component: "ff8-cards:exe:ff8-cards-dev"
+      component: "ff8-cards:exe:unopt"
 
     - path: "app/Main.hs"
-      component: "ff8-cards:exe:ff8-cards"
+      component: "ff8-cards:exe:opt"
 
     - path: "bench/Main.hs"
-      component: "ff8-cards:exe:ff8-cards-prof"
+      component: "ff8-cards:exe:bench"

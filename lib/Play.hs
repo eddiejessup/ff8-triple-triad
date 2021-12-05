@@ -1,13 +1,12 @@
 module Play where
 
 import Automation
-import Data.Generics.Wrapped (_Unwrapped)
+import Control.Monad.Except qualified as Ex
 import Data.List ((!!))
 import Data.Text qualified as Tx
 import Data.Text.Read qualified as Tx.R
 import Diagrams qualified as D
 import Diagrams.Backend.SVG qualified as D.SVG
-import Control.Monad.Except qualified as Ex
 import Draw
 import Logic
 import Nice
@@ -34,17 +33,17 @@ parseBoardIxCol = \case
   "r" -> Just CRight
   _ -> Nothing
 
-parsePlay :: Text -> Maybe (HandIx, BoardIx)
+parsePlay :: Text -> Maybe Play
 parsePlay t = do
   let parts = Tx.splitOn " " t
   guard (length parts == 3)
   playHandIx <- parseHandIx (parts !! 0)
   playBoardRow <- parseBoardIxRow (parts !! 1)
   playBoardCol <- parseBoardIxCol (parts !! 2)
-  pure (playHandIx, fromNice (playBoardRow, playBoardCol))
+  pure $ Play playHandIx (fromNice (playBoardRow, playBoardCol))
 
-playGame :: Int -> Player -> Game -> IO ()
-playGame aiMaxDepth player = go
+playGame :: SearchParams -> Player -> Game -> IO ()
+playGame aiParams player = go
   where
     go g = do
       putTextLn $ "Score: P1=" <> show (score P1 g) <> ", P2=" <> show (score P2 g)
@@ -54,70 +53,53 @@ playGame aiMaxDepth player = go
           putTextLn "It's over!"
           writeGame g
         else do
-          let
-            foo :: (Ex.MonadError Text m, MonadIO m) => m Game
-            foo = do
-              if g ^. #turn == player
-                then do
-                  writeGame g
-                  putTextLn $ "Make your play, " <> show player <> "([0-4] [tmb] [lmr]):"
+          let foo :: (Ex.MonadError Text m, MonadIO m) => m Game
+              foo = do
+                if g ^. #turn == player
+                  then do
+                    writeGame g
+                    putTextLn $ "Make your play, " <> show player <> "([0-4] [tmb] [lmr]):"
 
-                  getLine >>= \case
-                    t | Just maxDepthTx <- Tx.stripPrefix "hint " t -> do
-                      maxDepth <- case Tx.R.decimal maxDepthTx of
-                          Right (v, "") -> pure v
+                    getLine >>= \case
+                      t | Just maxDepthTx <- Tx.stripPrefix "hint " t -> do
+                        maxDepth <- case Tx.R.decimal maxDepthTx of
+                          Right (v, "") -> pure $ SearchParams {maxDepth = v}
                           _ -> Ex.throwError "Bad depth"
 
-                      (bestValue, bestPlays) <- case bestNextGames maxDepth g of
-                        Nothing ->
-                          Ex.throwError "No more games"
-                        Just (bestValue, bests) -> do
-                          pure (bestValue, bests <&> fst)
-                      putTextLn $ "Best plays, with value=" <> show bestValue <> ": "
-                      putText $ unlines $ toList $ bestPlays <&> showPlay
-                      Ex.throwError "Got hint"
-                    playRaw | Just (hix, bix) <- parsePlay playRaw -> do
-                      let newGame = playCard hix bix g
-                      writeGame newGame
-                      putTextLn "Play made. Press enter to end turn"
-                      _ <- getLine
-                      pure newGame
-                    _ -> do
-                      putTextLn "Invalid input, go again..."
-                      Ex.throwError "Invalid input"
-                else do
-                  putTextLn "Playing P2..."
-                  case aBestNextGame aiMaxDepth g of
-                    Nothing ->
-                      Ex.throwError "end"
-                    Just (_bestValue, ((hix, bix), _bestGame)) -> do
-                      putTextLn $ "P2 plays: " <> showPlay (hix, bix)
-                      pure $ playCard hix bix g
+                        (bestValue, bestPlays) <- case bestNextGames maxDepth g of
+                          Nothing ->
+                            Ex.throwError "No more games"
+                          Just (bestValue, bests) -> do
+                            pure (bestValue, bests <&> fst)
+                        putTextLn $ "Best plays, with value=" <> show bestValue <> ": "
+                        putText $ unlines $ toList $ bestPlays <&> showPlay
+                        Ex.throwError "Got hint"
+                      playRaw | Just pl <- parsePlay playRaw -> do
+                        let newGame = playCard pl g
+                        writeGame newGame
+                        putTextLn "Play made. Press enter to end turn"
+                        _ <- getLine
+                        pure newGame
+                      _ -> do
+                        putTextLn "Invalid input, go again..."
+                        Ex.throwError "Invalid input"
+                  else do
+                    putTextLn "Playing P2..."
+                    case aBestNextGame aiParams g of
+                      Nothing ->
+                        Ex.throwError "end"
+                      Just (_bestValue, (bestPlay, _bestGame)) -> do
+                        putTextLn $ "P2 plays: " <> showPlay bestPlay
+                        pure $ playCard bestPlay g
           errOrnewGame <- runExceptT foo
 
           nextGame <- case errOrnewGame of
-                Left e -> do
-                  putTextLn $ "Not advancing game because: '" <> e <> "'"
-                  pure g
-                Right newGame ->
-                  pure newGame
+            Left e -> do
+              putTextLn $ "Not advancing game because: '" <> e <> "'"
+              pure g
+            Right newGame ->
+              pure newGame
           go nextGame
 
     writeGame g =
       liftIO $ D.SVG.renderSVG "foob.svg" (D.mkSizeSpec2D (Just 400) (Just 400)) (gameDiagram g)
-
-    showPlay (hix, bix) =
-      let hixS = show $ hix ^. _Unwrapped
-
-          (bRow, bCol) = toNice bix
-
-          rowS = case bRow of
-            RTop -> "t"
-            RMid -> "m"
-            RBot -> "b"
-
-          colS = case bCol of
-            CLeft -> "l"
-            CMid -> "m"
-            CRight -> "r"
-       in hixS <> " " <> rowS <> " " <> colS

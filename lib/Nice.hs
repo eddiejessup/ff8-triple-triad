@@ -4,6 +4,12 @@ import Data.Generics.Wrapped (_Unwrapped)
 import Optics ((^.))
 import Types
 
+data RowPos = RTop | RMid | RBot
+  deriving (Show, Generic)
+
+data ColPos = CLeft | CMid | CRight
+  deriving (Show, Generic)
+
 type NiceBoardIx = (RowPos, ColPos)
 
 fromNice :: NiceBoardIx -> BoardIx
@@ -37,3 +43,20 @@ boardRow b r = [CLeft, CMid, CRight] <&> \c -> boardAt b (fromNice (r, c))
 
 boardCol :: Board -> ColPos -> [Maybe BoardCard]
 boardCol b c = [RTop, RMid, RBot] <&> \r -> boardAt b (fromNice (r, c))
+
+showPlay :: Play -> Text
+showPlay (Play hix bix) =
+  let hixS = show $ hix ^. _Unwrapped
+
+      (bRow, bCol) = toNice bix
+
+      rowS = case bRow of
+        RTop -> "t"
+        RMid -> "m"
+        RBot -> "b"
+
+      colS = case bCol of
+        CLeft -> "l"
+        CMid -> "m"
+        CRight -> "r"
+   in hixS <> " " <> rowS <> " " <> colS

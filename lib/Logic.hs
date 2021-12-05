@@ -1,15 +1,12 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module Logic where
 
 import Data.Sequence qualified as Seq
 import Optics ((!~))
+import Test.QuickCheck (Arbitrary (arbitrary))
+import Test.QuickCheck qualified as QC
 import Types
-
-invertDirection :: Direction -> Direction
-invertDirection = \case
-  North -> South
-  South -> North
-  East -> West
-  West -> East
 
 flippedBoardIxs :: Board -> OwnedCard -> BoardIx -> [BoardIx]
 flippedBoardIxs b OwnedCard {card = srcCard, player = srcP} ix =
@@ -25,18 +22,11 @@ flippedBoardIxs b OwnedCard {card = srcCard, player = srcP} ix =
     8 -> [boardAtUnsafe 7 w e, boardAtUnsafe 5 n s]
     _ -> error "Impossible"
   where
-    boardAtUnsafe :: Int -> (Card -> Int) -> (Card -> Int) -> Maybe BoardIx
+    boardAtUnsafe :: Int -> (Card -> Points) -> (Card -> Points) -> Maybe BoardIx
     boardAtUnsafe i srcGetter tgtGetter = do
       BoardCard (OwnedCard {card = tgtCard, player = tgtP}) _ _ <- unBoard b `Seq.index` i
       guard (srcP /= tgtP && srcGetter srcCard > tgtGetter tgtCard)
       pure $ BoardIx i
-
-cardPointsInDirection :: Card -> Direction -> Int
-cardPointsInDirection Card {n, e, s, w} = \case
-  North -> n
-  East -> e
-  South -> s
-  West -> w
 
 -- Low-level
 boardSpaceSet :: BoardIx -> BoardCard -> Board -> Board
@@ -69,8 +59,8 @@ addCardToBoard b ix oc@OwnedCard {player} =
        in foldl' boardSpaceFlip boardAfterAdd ixsToFlip
     Just _ -> error "Board space already inhabited"
 
-playCard :: HandIx -> BoardIx -> Game -> Game
-playCard hIx bIx g@Game {board, turn} =
+playCard :: Play -> Game -> Game
+playCard (Play hIx bIx) g@Game {board, turn} =
   let (playedCard, pluckedHand) = pluckFromHand (relevantHand g) hIx
 
       playedBoard = addCardToBoard board bIx (OwnedCard playedCard turn)
@@ -78,3 +68,32 @@ playCard hIx bIx g@Game {board, turn} =
         & relevantHandSetter !~ pluckedHand
         & #board !~ playedBoard
         & #turn !~ otherPlayer turn
+
+arbitraryInitialGame :: QC.Gen Game
+arbitraryInitialGame =
+  Game
+    <$> arbitraryInitialHand
+    <*> arbitraryInitialHand
+    <*> pure emptyBoard
+    <*> arbitrary
+
+arbitraryPlay :: Game -> QC.Gen Play
+arbitraryPlay g = QC.elements (possibleNextPlays g)
+
+cycleNTimes :: Monad m => (a -> m a) -> Int -> a -> m a
+cycleNTimes f = go
+  where
+    go n v = case n of
+      0 -> pure v
+      _ -> f v >>= go (n - 1)
+
+arbitraryNextGame :: Game -> QC.Gen Game
+arbitraryNextGame g = do
+  ply <- arbitraryPlay g
+  pure $ playCard ply g
+
+instance Arbitrary Game where
+  arbitrary = do
+    g0 <- arbitraryInitialGame
+    desiredNrPlays <- QC.chooseInt (0, 9)
+    cycleNTimes arbitraryNextGame desiredNrPlays g0

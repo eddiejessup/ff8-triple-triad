@@ -31,7 +31,8 @@ common common-all
       relude,
       generic-optics,
       optics,
-      mtl
+      mtl,
+      QuickCheck
 
     default-language: Haskell2010
     default-extensions:
@@ -85,14 +86,14 @@ common common-exec
     import:        common-all
     build-depends: ff8-cards
 
-executable ff8-cards-dev
+executable unopt
     import:        common-exec
     hs-source-dirs:   app
     main-is:          Main.hs
     ghc-options:
       -O0
 
-executable ff8-cards
+executable opt
     import:        common-exec
     hs-source-dirs:   app
     main-is:          Main.hs
@@ -101,7 +102,7 @@ executable ff8-cards
       -threaded
       "-with-rtsopts=-N"
 
-executable ff8-cards-prof
+executable bench
     import:        common-exec
     hs-source-dirs:   bench
     main-is:          Main.hs

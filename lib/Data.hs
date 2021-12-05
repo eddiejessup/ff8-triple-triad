@@ -2,11 +2,11 @@
 
 module Data where
 
+import Data.FileEmbed (embedFile, makeRelativeToProject)
 import Data.HashMap.Strict qualified as HM
-import Types
-import Data.FileEmbed (makeRelativeToProject, embedFile)
 import Data.Text qualified as Tx
 import Data.Text.Read qualified as Tx.R
+import Types
 
 cardsTx :: Text
 cardsTx = decodeUtf8 $(makeRelativeToProject "data/cards.csv" >>= embedFile)
@@ -21,7 +21,7 @@ cardLib = HM.fromList (parseLine <$> lines cardsTx)
         _ -> error $ "Bad line: " <> show ln
 
     parsePts t = case Tx.R.decimal t of
-      Right (v, "") -> v
+      Right (v, "") -> Points v
       _ -> error $ "Bad points:" <> show t
 
 -- cardLib :: HashMap Text Card

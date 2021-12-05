@@ -24,11 +24,11 @@ game =
 mainPlay :: IO ()
 mainPlay = do
   hSetBuffering stdin NoBuffering
-  playGame 1 P2 game
+  playGame (SearchParams {maxDepth = 1}) P2 game
 
 mainOptPlay :: IO ()
 mainOptPlay = do
-  let optGame = optimalGame 4 game
+  let optGame = optimalGame (SearchParams {maxDepth = 4}) game
   D.Cmd.mainWith (gameDiagram $ last optGame)
 
 main :: IO ()

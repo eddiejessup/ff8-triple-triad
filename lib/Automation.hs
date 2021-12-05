@@ -1,70 +1,67 @@
 module Automation where
 
-import Data.Foldable (maximum, maximumBy)
+import Data.Foldable (Foldable (minimum), maximum, maximumBy)
 import Data.List.NonEmpty qualified as NE
-import Data.Sequence qualified as Seq
 import Data.Tree (Tree)
 import Data.Tree qualified as T
 import Logic
+import Test.QuickCheck (Arbitrary)
+import Test.QuickCheck qualified as QC
 import Types
 
-possibleHandIxs :: Hand -> [HandIx]
-possibleHandIxs h = HandIx <$> Seq.findIndicesL isJust (unHand h)
+newtype SearchParams = SearchParams {maxDepth :: Int}
+  deriving (Show, Eq, Generic)
 
-possibleRelevantHandIxs :: Game -> [HandIx]
-possibleRelevantHandIxs g = possibleHandIxs (relevantHand g)
-
-possibleBoardIxs :: Board -> [BoardIx]
-possibleBoardIxs b = BoardIx <$> Seq.findIndicesL isNothing (unBoard b)
-
-possibleNextPlays :: Game -> [Play]
-possibleNextPlays g = do
-  nextHix <- possibleRelevantHandIxs g
-  nextBix <- possibleBoardIxs $ board g
-  pure (nextHix, nextBix)
+instance Arbitrary SearchParams where
+  arbitrary = do
+    maxDepth <- QC.chooseInt (1, 3)
+    pure SearchParams {maxDepth}
 
 possibleNextGames :: Game -> [Game]
 possibleNextGames g = do
-  (nextHix, nextBix) <- possibleNextPlays g
-  pure $ playCard nextHix nextBix g
+  nextPlay <- possibleNextPlays g
+  pure $ playCard nextPlay g
 
-bestNextGames :: Int -> Game -> Maybe (Int, NonEmpty (Play, Game))
-bestNextGames maxDepth g0 = do
+bestNextGames :: SearchParams -> Game -> Maybe (Int, NonEmpty (Play, Game))
+bestNextGames params g0 = do
   nextPlays <- nonEmpty (possibleNextPlays g0)
-  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-      nextValues = nextGames <&> gameValue maxDepth (turn g0)
+  let nextGames = nextPlays <&> \pl -> playCard pl g0
+      nextValues = nextGames <&> gameValue params (turn g0)
       bestValue = maximum nextValues
       nexts = NE.zip (NE.zip nextPlays nextGames) nextValues
   bests <- nonEmpty $ NE.filter (\((_, _), v) -> v == bestValue) nexts
   pure (bestValue, bests <&> fst)
 
-aBestNextGame :: Int -> Game -> Maybe (Int, (Play, Game))
-aBestNextGame maxDepth g0 = do
-  (bestScore, bests) <- bestNextGames maxDepth g0
+aBestNextGame :: SearchParams -> Game -> Maybe (Int, (Play, Game))
+aBestNextGame params g0 = do
+  (bestScore, bests) <- bestNextGames params g0
   pure (bestScore, last bests)
 
-aBestNextGameFast :: Int -> Game -> Maybe Game
-aBestNextGameFast maxDepth g0 = do
+aBestNextGameFast :: SearchParams -> Game -> Maybe Game
+aBestNextGameFast params g0 = do
   nextPlays <- nonEmpty $ possibleNextPlays g0
-  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-      nextValues = nextGames <&> \g -> (g, gameValue maxDepth (turn g0) g)
+  let nextGames = nextPlays <&> \pl -> playCard pl g0
+      nextValues = nextGames <&> \g -> (g, gameValue params (turn g0) g)
       best = fst $ maximumBy (\(_, a) (_, b) -> compare a b) nextValues
    in Just best
 
-optimalGame :: Int -> Game -> NonEmpty Game
-optimalGame maxDepth = NE.unfoldr go
+optimalGame :: SearchParams -> Game -> NonEmpty Game
+optimalGame params = NE.unfoldr go
   where
-    go g = (g, aBestNextGameFast maxDepth g)
+    go g = (g, aBestNextGameFast params g)
 
-gameValue :: Int -> Player -> Game -> Int
-gameValue maxDepth = go 0
+gameValue :: SearchParams -> Player -> Game -> Int
+gameValue SearchParams {maxDepth} evalPlayer = go 0
   where
-    go curDepth evalPlayer g =
+    go curDepth g =
       case nonEmpty (possibleNextGames g) of
-        Just nextGames | curDepth < maxDepth ->
-          let turnPlayer = turn g
-              valueToTurnPlayer = maximum (go (curDepth + 1) turnPlayer <$> nextGames)
-          in if evalPlayer == turnPlayer then valueToTurnPlayer else 10 - valueToTurnPlayer
+        Just nextGames
+          | curDepth < maxDepth ->
+            let agger =
+                  if evalPlayer == turn g
+                    then maximum
+                    else minimum
+             in agger (go (curDepth + 1) <$> nextGames)
         _ ->
           score evalPlayer g
 
@@ -73,7 +70,7 @@ gameTree maxDepth g0 = T.unfoldTree go (g0, 0)
   where
     go :: (Game, Int) -> (Game, [(Game, Int)])
     go (g, depth) =
-      (g, if depth == maxDepth then [] else possibleNextGames g <&> (, depth + 1))
+      (g, if depth == maxDepth then [] else possibleNextGames g <&> (,depth + 1))
 
 countGames :: (Int, Int) -> Bool -> Int
 countGames (p1Cards, p2Cards) isP1 =
