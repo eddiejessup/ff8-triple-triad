@@ -28,6 +28,53 @@ possibleNextGames g = do
   (nextHix, nextBix) <- possibleNextPlays g
   pure $ playCard nextHix nextBix g
 
+bestNextGames :: Int -> Game -> Maybe (Int, NonEmpty (Play, Game))
+bestNextGames maxDepth g0 = do
+  nextPlays <- nonEmpty (possibleNextPlays g0)
+  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
+      nextValues = nextGames <&> gameValue maxDepth (turn g0)
+      bestValue = maximum nextValues
+      nexts = NE.zip (NE.zip nextPlays nextGames) nextValues
+  bests <- nonEmpty $ NE.filter (\((_, _), v) -> v == bestValue) nexts
+  pure (bestValue, bests <&> fst)
+
+aBestNextGame :: Int -> Game -> Maybe (Int, (Play, Game))
+aBestNextGame maxDepth g0 = do
+  (bestScore, bests) <- bestNextGames maxDepth g0
+  pure (bestScore, last bests)
+
+aBestNextGameFast :: Int -> Game -> Maybe Game
+aBestNextGameFast maxDepth g0 = do
+  nextPlays <- nonEmpty $ possibleNextPlays g0
+  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
+      nextValues = nextGames <&> \g -> (g, gameValue maxDepth (turn g0) g)
+      best = fst $ maximumBy (\(_, a) (_, b) -> compare a b) nextValues
+   in Just best
+
+optimalGame :: Int -> Game -> NonEmpty Game
+optimalGame maxDepth = NE.unfoldr go
+  where
+    go g = (g, aBestNextGameFast maxDepth g)
+
+gameValue :: Int -> Player -> Game -> Int
+gameValue maxDepth = go 0
+  where
+    go curDepth evalPlayer g =
+      case nonEmpty (possibleNextGames g) of
+        Just nextGames | curDepth < maxDepth ->
+          let turnPlayer = turn g
+              valueToTurnPlayer = maximum (go (curDepth + 1) turnPlayer <$> nextGames)
+          in if evalPlayer == turnPlayer then valueToTurnPlayer else 10 - valueToTurnPlayer
+        _ ->
+          score evalPlayer g
+
+gameTree :: Int -> Game -> Tree Game
+gameTree maxDepth g0 = T.unfoldTree go (g0, 0)
+  where
+    go :: (Game, Int) -> (Game, [(Game, Int)])
+    go (g, depth) =
+      (g, if depth == maxDepth then [] else possibleNextGames g <&> (, depth + 1))
+
 countGames :: (Int, Int) -> Bool -> Int
 countGames (p1Cards, p2Cards) isP1 =
   let nrCardsPlayed = (5 - p1Cards) + (5 - p2Cards)
@@ -45,55 +92,3 @@ countGames (p1Cards, p2Cards) isP1 =
    in if nrPlaysNow == 0
         then 1
         else nrPlaysNow * countGames newHands (not isP1)
-
-bestNextGames :: Game -> Maybe (Int, NonEmpty (Play, Game))
-bestNextGames g0 = do
-  nextPlays <- nonEmpty (possibleNextPlays g0)
-  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-      nextValues = nextGames <&> gameValue (turn g0)
-      bestValue = maximum nextValues
-      nexts = NE.zip (NE.zip nextPlays nextGames) nextValues
-  bests <- nonEmpty $ NE.filter (\((_, _), v) -> v == bestValue) nexts
-  pure (bestValue, bests <&> fst)
-
-aBestNextGame :: Game -> Maybe (Int, (Play, Game))
-aBestNextGame g0 = do
-  (bestScore, bests) <- bestNextGames g0
-  pure (bestScore, last bests)
-
-aBestNextGameFast :: Game -> Maybe Game
-aBestNextGameFast g0 = do
-  nextPlays <- nonEmpty $ possibleNextPlays g0
-  let nextGames = nextPlays <&> \(hIx, bIx) -> playCard hIx bIx g0
-      nextValues = nextGames <&> \g -> (g, gameValue (turn g0) g)
-      best = fst $ maximumBy (\(_, a) (_, b) -> compare a b) nextValues
-   in Just best
-
-optimalGame :: Game -> [Game]
-optimalGame = unfoldr go
-  where
-    go g =
-      aBestNextGameFast g <&> \best -> (best, best)
-
-compareGameValues :: Player -> Game -> Game -> Ordering
-compareGameValues p a b = compare (gameValue p a) (gameValue p b)
-
-gameValue :: Player -> Game -> Int
-gameValue evalPlayer g =
-  case possibleNextGames g of
-    [] ->
-      score evalPlayer g
-    nextGames ->
-      let turnPlayer = turn g
-
-          valueToTurnPlayer = maximum (gameValue turnPlayer <$> nextGames)
-
-          valueToEvalPlayer = if evalPlayer == turnPlayer then valueToTurnPlayer else 10 - valueToTurnPlayer
-       in valueToEvalPlayer
-
-gameTree :: Int -> Game -> Tree Game
-gameTree maxDepth game0 = T.unfoldTree go (game0, 0)
-  where
-    go :: (Game, Int) -> (Game, [(Game, Int)])
-    go (g, depth) =
-      (g, if depth == maxDepth then [] else toList (possibleNextGames g) <&> (,depth + 1))

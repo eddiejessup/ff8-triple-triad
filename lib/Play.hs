@@ -7,6 +7,7 @@ import Data.Text qualified as Tx
 import Data.Text.Read qualified as Tx.R
 import Diagrams qualified as D
 import Diagrams.Backend.SVG qualified as D.SVG
+import Control.Monad.Except qualified as Ex
 import Draw
 import Logic
 import Nice
@@ -42,8 +43,8 @@ parsePlay t = do
   playBoardCol <- parseBoardIxCol (parts !! 2)
   pure (playHandIx, fromNice (playBoardRow, playBoardCol))
 
-playGame :: Player -> Game -> IO ()
-playGame player = go
+playGame :: Int -> Player -> Game -> IO ()
+playGame aiMaxDepth player = go
   where
     go g = do
       putTextLn $ "Score: P1=" <> show (score P1 g) <> ", P2=" <> show (score P2 g)
@@ -53,42 +54,57 @@ playGame player = go
           putTextLn "It's over!"
           writeGame g
         else do
-          newGame <-
-            if g ^. #turn == player
-              then do
-                writeGame g
-                putTextLn $ "Make your play, " <> show player <> "([0-4] [tmb] [lmr]):"
+          let
+            foo :: (Ex.MonadError Text m, MonadIO m) => m Game
+            foo = do
+              if g ^. #turn == player
+                then do
+                  writeGame g
+                  putTextLn $ "Make your play, " <> show player <> "([0-4] [tmb] [lmr]):"
 
-                getLine >>= \case
-                  "hint" -> do
-                    (bestValue, bestPlays) <- case bestNextGames g of
-                      Nothing ->
-                        error "end"
-                      Just (bestValue, bests) -> do
-                        pure (bestValue, bests <&> fst)
-                    putTextLn $ "Best plays, with value=" <> show bestValue <> ": "
-                    putText $ unlines $ toList $ bestPlays <&> showPlay
-                    pure g
-                  playRaw | Just (hix, bix) <- parsePlay playRaw -> do
-                    let newGame = playCard hix bix g
-                    writeGame newGame
-                    putTextLn "Play made. Press enter to end turn"
-                    _ <- getLine
-                    pure newGame
-                  _ -> do
-                    putTextLn "Invalid input, go again..."
-                    pure g
-              else do
-                putTextLn "Playing P2..."
-                case aBestNextGame g of
-                  Nothing ->
-                    error "end"
-                  Just (_bestValue, ((hix, bix), _bestGame)) -> do
-                    putTextLn $ "P2 plays: " <> showPlay (hix, bix)
-                    pure $ playCard hix bix g
-          go newGame
+                  getLine >>= \case
+                    t | Just maxDepthTx <- Tx.stripPrefix "hint " t -> do
+                      maxDepth <- case Tx.R.decimal maxDepthTx of
+                          Right (v, "") -> pure v
+                          _ -> Ex.throwError "Bad depth"
+
+                      (bestValue, bestPlays) <- case bestNextGames maxDepth g of
+                        Nothing ->
+                          Ex.throwError "No more games"
+                        Just (bestValue, bests) -> do
+                          pure (bestValue, bests <&> fst)
+                      putTextLn $ "Best plays, with value=" <> show bestValue <> ": "
+                      putText $ unlines $ toList $ bestPlays <&> showPlay
+                      Ex.throwError "Got hint"
+                    playRaw | Just (hix, bix) <- parsePlay playRaw -> do
+                      let newGame = playCard hix bix g
+                      writeGame newGame
+                      putTextLn "Play made. Press enter to end turn"
+                      _ <- getLine
+                      pure newGame
+                    _ -> do
+                      putTextLn "Invalid input, go again..."
+                      Ex.throwError "Invalid input"
+                else do
+                  putTextLn "Playing P2..."
+                  case aBestNextGame aiMaxDepth g of
+                    Nothing ->
+                      Ex.throwError "end"
+                    Just (_bestValue, ((hix, bix), _bestGame)) -> do
+                      putTextLn $ "P2 plays: " <> showPlay (hix, bix)
+                      pure $ playCard hix bix g
+          errOrnewGame <- runExceptT foo
+
+          nextGame <- case errOrnewGame of
+                Left e -> do
+                  putTextLn $ "Not advancing game because: '" <> e <> "'"
+                  pure g
+                Right newGame ->
+                  pure newGame
+          go nextGame
+
     writeGame g =
-      D.SVG.renderSVG "foob.svg" (D.mkSizeSpec2D (Just 400) (Just 400)) (gameDiagram g)
+      liftIO $ D.SVG.renderSVG "foob.svg" (D.mkSizeSpec2D (Just 400) (Just 400)) (gameDiagram g)
 
     showPlay (hix, bix) =
       let hixS = show $ hix ^. _Unwrapped

@@ -30,7 +30,9 @@ common common-all
       diagrams-svg,
       relude,
       generic-optics,
-      optics
+      optics,
+      mtl
+
     default-language: Haskell2010
     default-extensions:
       ConstraintKinds
@@ -76,6 +78,7 @@ common common-all
 library
   import: common-all
   exposed-modules: Draw, Types, Logic, Automation, Data, Play, Nice
+  build-depends: file-embed
   hs-source-dirs: lib
 
 common common-exec
