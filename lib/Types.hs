@@ -1,5 +1,6 @@
 module Types where
 
+import Data.Aeson qualified as Ae
 import Data.Sequence qualified as Seq
 import Optics (Setter', sets)
 import Test.QuickCheck qualified as QC
@@ -32,6 +33,9 @@ instance Arbitrary Points where
 
 data Card = Card {n, e, s, w :: Points}
   deriving (Show, Eq, Generic)
+
+icard :: Int -> Int -> Int -> Int -> Card
+icard n e s w = Card (Points n) (Points e) (Points s) (Points w)
 
 instance Arbitrary Card where
   arbitrary =
@@ -71,8 +75,8 @@ emptyBoard = Board $ Seq.replicate 9 Nothing
 nrCardsOnBoard :: Board -> Int
 nrCardsOnBoard = countWhere isJust . unBoard
 
-possibleBoardIxs :: Board -> [BoardIx]
-possibleBoardIxs b = BoardIx <$> Seq.findIndicesL isNothing (unBoard b)
+availableBoardIxs :: Board -> [BoardIx]
+availableBoardIxs b = BoardIx <$> Seq.findIndicesL isNothing (unBoard b)
 
 newtype BoardIx = BoardIx {unBoardIx :: Int}
   deriving (Show, Generic)
@@ -84,6 +88,9 @@ boardAt b ix =
 newtype Hand = Hand {unHand :: Seq (Maybe Card)}
   deriving (Show, Generic)
 
+handAt :: Hand -> HandIx -> Maybe Card
+handAt h ix = unHand h `Seq.index` unHandIx ix
+
 arbitraryInitialHand :: QC.Gen Hand
 arbitraryInitialHand = do
   cardList <- QC.vectorOf 5 (arbitrary @Card)
@@ -94,14 +101,18 @@ newHand = Hand . fmap Just
 
 newtype HandIx = HandIx {unHandIx :: Int}
   deriving (Show, Generic)
+  deriving newtype (Ae.FromJSON)
 
-possibleHandIxs :: Hand -> [HandIx]
-possibleHandIxs h = HandIx <$> Seq.findIndicesL isJust (unHand h)
+availableHandIxs :: Hand -> [HandIx]
+availableHandIxs h = HandIx <$> Seq.findIndicesL isJust (unHand h)
 
-data Play = Play {playHandIx :: HandIx, playBoardIx :: BoardIx}
+data Move = Move {moveHandIx :: HandIx, moveBoardIx :: BoardIx}
 
 data Game = Game {p1Hand, p2Hand :: Hand, board :: Board, turn :: Player}
   deriving (Show, Generic)
+
+initialGame :: Hand -> Hand -> Player -> Game
+initialGame p1Hand p2Hand turn = Game {p1Hand, p2Hand, turn, board = emptyBoard}
 
 relevantHand :: Game -> Hand
 relevantHand Game {turn, p1Hand, p2Hand} = case turn of
@@ -117,11 +128,11 @@ relevantHandSetter = sets setRelevantHand
       P1 -> g {p1Hand = f p1Hand}
       P2 -> g {p2Hand = f p2Hand}
 
-possibleNextPlays :: Game -> [Play]
-possibleNextPlays g = do
-  playHandIx <- possibleHandIxs (relevantHand g)
-  playBoardIx <- possibleBoardIxs $ board g
-  pure $ Play {playHandIx, playBoardIx}
+possibleMoves :: Game -> [Move]
+possibleMoves g = do
+  moveHandIx <- availableHandIxs (relevantHand g)
+  moveBoardIx <- availableBoardIxs $ board g
+  pure $ Move {moveHandIx, moveBoardIx}
 
 score :: Player -> Game -> Int
 score p g =

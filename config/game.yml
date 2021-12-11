@@ -1,0 +1,36 @@
+game:
+  hands:
+    p1:
+      - ifrit
+      - minimog
+      - biggs wedge
+      - tonberry king
+      - ruby dragon
+
+    p2:
+      - ifrit
+      - minimog
+      - biggs wedge
+      - tonberry king
+      - ruby dragon
+
+  first-player: 1
+
+  moves:
+    -
+      card: 0
+      position: bottom left
+    -
+      card: 0
+      position: bottom right
+    - 1 b m
+
+players:
+  p1:
+    bot: false
+    search-params:
+      max-depth: 2
+  p2:
+    bot: true
+    search-params:
+      max-depth: 2

@@ -1,0 +1,32 @@
+game:
+  hands:
+    p1:
+      - geezard
+      - geezard
+      - bite bug
+      - belhelmel
+      - fastitocalon
+
+    p2:
+      - mesmerize
+      - caterchipillar
+      - cockatrice
+      - funguar
+      - red bat
+
+  first-player: 1
+
+  moves:
+    -
+      card: 0
+      position: top right
+
+players:
+  p1:
+    bot: true
+    search-params:
+      max-depth: 100
+  p2:
+    bot: true
+    search-params:
+      max-depth: 100

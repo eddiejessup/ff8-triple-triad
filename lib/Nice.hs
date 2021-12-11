@@ -1,5 +1,6 @@
 module Nice where
 
+import Data qualified
 import Data.Generics.Wrapped (_Unwrapped)
 import Optics ((^.))
 import Types
@@ -44,19 +45,29 @@ boardRow b r = [CLeft, CMid, CRight] <&> \c -> boardAt b (fromNice (r, c))
 boardCol :: Board -> ColPos -> [Maybe BoardCard]
 boardCol b c = [RTop, RMid, RBot] <&> \r -> boardAt b (fromNice (r, c))
 
-showPlay :: Play -> Text
-showPlay (Play hix bix) =
-  let hixS = show $ hix ^. _Unwrapped
+playedCardName :: Game -> HandIx -> Text
+playedCardName g hix = case handAt (relevantHand g) hix of
+  Nothing -> error "No card found in hand!"
+  Just c -> fromMaybe "[Unknown]" (Data.cardName c)
 
-      (bRow, bCol) = toNice bix
+showBoardIxNice :: BoardIx -> Text
+showBoardIxNice bix =
+  let (bRow, bCol) = toNice bix
 
       rowS = case bRow of
-        RTop -> "t"
-        RMid -> "m"
-        RBot -> "b"
+        RTop -> "top"
+        RMid -> "middle"
+        RBot -> "bottom"
 
       colS = case bCol of
-        CLeft -> "l"
-        CMid -> "m"
-        CRight -> "r"
-   in hixS <> " " <> rowS <> " " <> colS
+        CLeft -> "left"
+        CMid -> "center"
+        CRight -> "right"
+   in rowS <> " " <> colS
+
+showMove :: Game -> Move -> Text
+showMove g (Move hix bix) =
+  let hixS = show $ hix ^. _Unwrapped
+      nameS = playedCardName g hix
+      bixS = showBoardIxNice bix
+   in hixS <> " " <> bixS <> " (" <> nameS <> ")"

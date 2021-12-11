@@ -48,8 +48,6 @@ pluckFromHand Hand {unHand = h} HandIx {unHandIx = hIx} =
     Nothing -> error "Card not present"
     Just c -> (c, Hand $ Seq.update hIx Nothing h)
 
--- Constructionally correct API.
-
 addCardToBoard :: Board -> BoardIx -> OwnedCard -> Board
 addCardToBoard b ix oc@OwnedCard {player} =
   case boardAt b ix of
@@ -59,8 +57,8 @@ addCardToBoard b ix oc@OwnedCard {player} =
        in foldl' boardSpaceFlip boardAfterAdd ixsToFlip
     Just _ -> error "Board space already inhabited"
 
-playCard :: Play -> Game -> Game
-playCard (Play hIx bIx) g@Game {board, turn} =
+makeMove :: Game -> Move -> Game
+makeMove g@Game {board, turn} (Move hIx bIx) =
   let (playedCard, pluckedHand) = pluckFromHand (relevantHand g) hIx
 
       playedBoard = addCardToBoard board bIx (OwnedCard playedCard turn)
@@ -68,6 +66,18 @@ playCard (Play hIx bIx) g@Game {board, turn} =
         & relevantHandSetter !~ pluckedHand
         & #board !~ playedBoard
         & #turn !~ otherPlayer turn
+
+playedGame :: Foldable f => Hand -> Hand -> Player -> f Move -> Game
+playedGame hand1 hand2 firstPlayer = makeMoves (initialGame hand1 hand2 firstPlayer)
+
+makeMoves :: Foldable f => Game -> f Move -> Game
+makeMoves = foldl' makeMove
+
+possibleNextGames :: Game -> [Game]
+possibleNextGames g =
+  makeMove g <$> possibleMoves g
+
+-- Arbitrariness.
 
 arbitraryInitialGame :: QC.Gen Game
 arbitraryInitialGame =
@@ -77,8 +87,8 @@ arbitraryInitialGame =
     <*> pure emptyBoard
     <*> arbitrary
 
-arbitraryPlay :: Game -> QC.Gen Play
-arbitraryPlay g = QC.elements (possibleNextPlays g)
+arbitraryMove :: Game -> QC.Gen Move
+arbitraryMove g = QC.elements (possibleMoves g)
 
 cycleNTimes :: Monad m => (a -> m a) -> Int -> a -> m a
 cycleNTimes f = go
@@ -88,12 +98,11 @@ cycleNTimes f = go
       _ -> f v >>= go (n - 1)
 
 arbitraryNextGame :: Game -> QC.Gen Game
-arbitraryNextGame g = do
-  ply <- arbitraryPlay g
-  pure $ playCard ply g
+arbitraryNextGame g =
+  makeMove g <$> arbitraryMove g
 
 instance Arbitrary Game where
   arbitrary = do
     g0 <- arbitraryInitialGame
-    desiredNrPlays <- QC.chooseInt (0, 9)
-    cycleNTimes arbitraryNextGame desiredNrPlays g0
+    desiredNrMoves <- QC.chooseInt (0, 9)
+    cycleNTimes arbitraryNextGame desiredNrMoves g0

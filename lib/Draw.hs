@@ -27,7 +27,7 @@ cardDiagram mayP Card {w, e, s, n} =
     <> mkText n (0, 1)
     <> (D.square 1 # D.fc (playerColor mayP))
   where
-    mkText val (x, y) = D.text (show val) # D.scale textScale # D.translate (D.r2 (x * (textPos / 2), y * (textPos / 2))) # D.fc (altPlayerColor mayP)
+    mkText val (x, y) = D.text (show (unPoints val)) # D.scale textScale # D.translate (D.r2 (x * (textPos / 2), y * (textPos / 2))) # D.fc (altPlayerColor mayP)
 
     textScale = 0.15
 

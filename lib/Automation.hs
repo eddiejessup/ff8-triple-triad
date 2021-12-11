@@ -2,6 +2,7 @@ module Automation where
 
 import Data.Foldable (Foldable (minimum), maximum, maximumBy)
 import Data.List.NonEmpty qualified as NE
+import Data.Traversable (for)
 import Data.Tree (Tree)
 import Data.Tree qualified as T
 import Logic
@@ -17,30 +18,26 @@ instance Arbitrary SearchParams where
     maxDepth <- QC.chooseInt (1, 3)
     pure SearchParams {maxDepth}
 
-possibleNextGames :: Game -> [Game]
-possibleNextGames g = do
-  nextPlay <- possibleNextPlays g
-  pure $ playCard nextPlay g
-
-bestNextGames :: SearchParams -> Game -> Maybe (Int, NonEmpty (Play, Game))
+bestNextGames :: SearchParams -> Game -> Maybe (Int, NonEmpty (Move, Game))
 bestNextGames params g0 = do
-  nextPlays <- nonEmpty (possibleNextPlays g0)
-  let nextGames = nextPlays <&> \pl -> playCard pl g0
+  nextPlays <- nonEmpty (possibleMoves g0)
+  let nextGames = nextPlays <&> makeMove g0
       nextValues = nextGames <&> gameValue params (turn g0)
       bestValue = maximum nextValues
-      nexts = NE.zip (NE.zip nextPlays nextGames) nextValues
-  bests <- nonEmpty $ NE.filter (\((_, _), v) -> v == bestValue) nexts
-  pure (bestValue, bests <&> fst)
+      nextPGs = NE.zip (NE.zip nextPlays nextGames) nextValues
+  bestPGS <- nonEmpty $ NE.filter (\((_, _), v) -> v == bestValue) nextPGs
+  let bestPlays = bestPGS <&> fst
+  pure (bestValue, bestPlays)
 
-aBestNextGame :: SearchParams -> Game -> Maybe (Int, (Play, Game))
+aBestNextGame :: SearchParams -> Game -> Maybe (Int, (Move, Game))
 aBestNextGame params g0 = do
   (bestScore, bests) <- bestNextGames params g0
   pure (bestScore, last bests)
 
 aBestNextGameFast :: SearchParams -> Game -> Maybe Game
 aBestNextGameFast params g0 = do
-  nextPlays <- nonEmpty $ possibleNextPlays g0
-  let nextGames = nextPlays <&> \pl -> playCard pl g0
+  nextPlays <- nonEmpty $ possibleMoves g0
+  let nextGames = nextPlays <&> makeMove g0
       nextValues = nextGames <&> \g -> (g, gameValue params (turn g0) g)
       best = fst $ maximumBy (\(_, a) (_, b) -> compare a b) nextValues
    in Just best
@@ -64,6 +61,28 @@ gameValue SearchParams {maxDepth} evalPlayer = go 0
              in agger (go (curDepth + 1) <$> nextGames)
         _ ->
           score evalPlayer g
+
+gameValueAlt :: SearchParams -> Player -> Game -> Int
+gameValueAlt SearchParams {maxDepth} evalPlayer = go 0
+  where
+    go curDepth g =
+      case nonEmpty (possibleNextGames g) of
+        Just nextGames
+          | curDepth < maxDepth ->
+            let nextGameValues = runIdentity $
+                  for nextGames $ \nextGame -> do
+                    pure $ go (curDepth + 1) nextGame
+
+                agger =
+                  if evalPlayer == turn g
+                    then maximum
+                    else minimum
+             in agger nextGameValues
+        _ ->
+          score evalPlayer g
+
+prop_gameValueFns :: SearchParams -> Player -> Game -> QC.Property
+prop_gameValueFns a b c = gameValue a b c QC.=== gameValueAlt a b c
 
 gameTree :: Int -> Game -> Tree Game
 gameTree maxDepth g0 = T.unfoldTree go (g0, 0)
