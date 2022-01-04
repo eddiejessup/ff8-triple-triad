@@ -2,13 +2,13 @@ module Automation where
 
 import Data.Foldable (Foldable (minimum), maximum, maximumBy)
 import Data.List.NonEmpty qualified as NE
-import Data.Traversable (for)
 import Data.Tree (Tree)
 import Data.Tree qualified as T
 import Logic
 import Test.QuickCheck (Arbitrary)
 import Test.QuickCheck qualified as QC
 import Types
+import Control.Monad (foldM)
 
 newtype SearchParams = SearchParams {maxDepth :: Int}
   deriving (Show, Eq, Generic)
@@ -48,7 +48,10 @@ optimalGame params = NE.unfoldr go
     go g = (g, aBestNextGameFast params g)
 
 gameValue :: SearchParams -> Player -> Game -> Int
-gameValue SearchParams {maxDepth} evalPlayer = go 0
+gameValue = gameValueAlt
+
+gameValueSimple :: SearchParams -> Player -> Game -> Int
+gameValueSimple SearchParams {maxDepth} evalPlayer = go 0
   where
     go curDepth g =
       case nonEmpty (possibleNextGames g) of
@@ -62,27 +65,101 @@ gameValue SearchParams {maxDepth} evalPlayer = go 0
         _ ->
           score evalPlayer g
 
-gameValueAlt :: SearchParams -> Player -> Game -> Int
-gameValueAlt SearchParams {maxDepth} evalPlayer = go 0
+negInfGameVal :: Int
+negInfGameVal = -1000
+
+posInfGameVal :: Int
+posInfGameVal = 1000
+
+type ValFloor = Int
+
+minOverTheirMoves :: ValFloor -> (Game -> Int) -> NonEmpty Game -> Maybe Int
+minOverTheirMoves valFloor gameToVal = foldM f posInfGameVal
   where
-    go curDepth g =
+    f :: Int -> Game -> Maybe Int
+    f curMinVal ng =
+      let ngVal = gameToVal ng
+      in
+        if ngVal < valFloor
+          then Nothing
+          else Just (min curMinVal ngVal)
+
+maxOverOurMoves :: (ValFloor -> Game -> Maybe Int) -> NonEmpty Game -> Int
+maxOverOurMoves gameToVal = foldl' f negInfGameVal
+  where
+    f :: Int -> Game -> Int
+    f curMaxVal ng =
+      case gameToVal curMaxVal ng of
+        Nothing -> curMaxVal
+        Just valAboveFloor -> max curMaxVal valAboveFloor
+
+
+gameValueAlt :: SearchParams -> Player -> Game -> Int
+gameValueAlt SearchParams {maxDepth} evalPlayer g0 =
+  case go negInfGameVal 0 g0 of
+    Nothing -> error "nooo"
+    Just v -> v
+  where
+    go :: ValFloor -> Int -> Game -> Maybe Int
+    go valFloor curDepth g =
       case nonEmpty (possibleNextGames g) of
         Just nextGames
           | curDepth < maxDepth ->
-            let nextGameValues = runIdentity $
-                  for nextGames $ \nextGame -> do
-                    pure $ go (curDepth + 1) nextGame
-
-                agger =
-                  if evalPlayer == turn g
-                    then maximum
-                    else minimum
-             in agger nextGameValues
+            if evalPlayer == turn g
+              then
+                let nGameToVal nngValFloor = go nngValFloor (curDepth + 1)
+                in Just $ maxOverOurMoves nGameToVal nextGames
+              else
+                let
+                  nGameToVal nng = case go negInfGameVal (curDepth + 1) nng of
+                      Nothing -> error "impossible?"
+                      Just nngVal -> nngVal
+                in minOverTheirMoves valFloor nGameToVal nextGames
         _ ->
-          score evalPlayer g
+          Just $ score evalPlayer g
 
-prop_gameValueFns :: SearchParams -> Player -> Game -> QC.Property
-prop_gameValueFns a b c = gameValue a b c QC.=== gameValueAlt a b c
+minOverTheirMoves2 :: ValCeil -> (Game -> Int) -> NonEmpty Game -> Maybe Int
+minOverTheirMoves2 initValCeil gameToVal games = foldM f posInfGameVal
+  where
+    f :: Int -> Game -> Maybe Int
+    f curMinVal ng =
+      let ngVal = gameToVal ng
+      in
+        if ngVal < valFloor
+          then Nothing
+          else Just (min curMinVal ngVal)
+
+maxOverOurMoves2 :: ValFloor -> (ValFloor -> Game -> Maybe Int) -> NonEmpty Game -> Int
+maxOverOurMoves2 initValFloor gameToVal games = snd $ foldl' f (initValFloor, negInfGameVal) games
+  where
+    f :: (ValFloor, Int) -> Game -> (ValFloor, Int)
+    f (curValFloor, curMaxVal) ng =
+      case gameToVal curValFloor ng of
+        Nothing -> (curValFloor, curMaxVal)
+        Just valAboveFloor ->
+          let newVal = max curMaxVal valAboveFloor
+          in (max curValFloor newVal,  newVal)
+
+gameValueAlt2 :: SearchParams -> Player -> Game -> Int
+gameValueAlt2 SearchParams {maxDepth} evalPlayer g0 =
+  case go negInfGameVal 0 g0 of
+    Nothing -> error "nooo"
+    Just v -> v
+  where
+    go :: ValFloor -> Int -> Int -> Game -> Maybe Int
+    go valFloor valCeil curDepth g =
+      case nonEmpty (possibleNextGames g) of
+        Just nextGames
+          | curDepth < maxDepth ->
+            if evalPlayer == turn g
+              then
+                let nGameToVal subValFloor = go subValFloor valCeil (curDepth + 1)
+                in Just $ maxOverOurMoves2 valFloor nGameToVal nextGames
+              else
+                let nGameToVal subValCeil = go valFloor subValCeil (curDepth + 1)
+                in minOverTheirMoves2 valCeil nGameToVal nextGames
+        _ ->
+          Just $ score evalPlayer g
 
 gameTree :: Int -> Game -> Tree Game
 gameTree maxDepth g0 = T.unfoldTree go (g0, 0)

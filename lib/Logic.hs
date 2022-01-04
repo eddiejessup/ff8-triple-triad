@@ -101,6 +101,11 @@ arbitraryNextGame :: Game -> QC.Gen Game
 arbitraryNextGame g =
   makeMove g <$> arbitraryMove g
 
+arbitraryGameAtNTurns :: Int -> QC.Gen Game
+arbitraryGameAtNTurns nrMoves = do
+    g0 <- arbitraryInitialGame
+    cycleNTimes arbitraryNextGame nrMoves g0
+
 instance Arbitrary Game where
   arbitrary = do
     g0 <- arbitraryInitialGame
